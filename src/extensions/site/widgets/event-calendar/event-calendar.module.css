@@ -1,0 +1,189 @@
+.root {
+  display: block;
+  width: 100%;
+  font-family: Arial, sans-serif;
+  color: #222;
+}
+
+.root,
+.root * {
+  box-sizing: border-box;
+}
+
+.calendar {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
+.nav button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.nav button:hover {
+  background: #f2f2f2;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.weekday {
+  padding: 4px 0;
+  color: #555;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.day {
+  min-height: 84px;
+  overflow: hidden;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 4px;
+  background: #fff;
+}
+
+.num {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+
+.chip {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  margin-top: 2px;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 4px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: #1558b0;
+}
+
+.past .chip {
+  background: #9aa0a6;
+}
+
+.chipTime {
+  margin-right: 3px;
+  font-weight: bold;
+}
+
+.more {
+  border: none;
+  padding: 2px 0;
+  background: none;
+  color: #1a73e8;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.details {
+  position: relative;
+  margin-top: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fafafa;
+}
+
+.details h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.details p {
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+.meta {
+  color: #555;
+}
+
+.close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.past {
+  background: #f4f4f4;
+  color: #aaa;
+}
+
+.otherMonth {
+  opacity: 0.5;
+}
+
+.today {
+  border: 2px solid #1a73e8;
+}
+
+.today .num {
+  color: #1a73e8;
+  font-weight: bold;
+}
+
+@media (max-width: 500px) {
+  .day {
+    min-height: 52px;
+    padding: 2px;
+  }
+
+  .chipTime {
+    display: none;
+  }
+
+  .chip {
+    font-size: 10px;
+  }
+
+  .num {
+    font-size: 12px;
+  }
+
+  .title {
+    font-size: 16px;
+  }
+}
