@@ -1,0 +1,16 @@
+{
+	"mcpServers": {
+		"wix-mcp-remote": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@wix/mcp-remote",
+				"https://mcp.wix.com/sse"
+			],
+			"tools": [
+				"*"
+			]
+		}
+	}
+}
