@@ -1,17 +1,19 @@
 import { httpClient } from '@wix/essentials';
 import { useEffect, useState } from 'react';
-import { CATEGORIES, type EventCategory, type PublicEvent } from '../../../../lib/events';
+import type { CityOption, PublicEvent } from '../../../../lib/events';
 
 type UseEventsOptions = {
   baseApiUrl: string;
   from: Date;
   to: Date;
-  categories: string[];
-  countries: string[];
+  city: string;
 };
 
 type EventsResponse = {
   events: PublicEvent[];
+  cities: CityOption[];
+  total: number;
+  truncated: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -28,39 +30,35 @@ function isPublicEvent(value: unknown): value is PublicEvent {
     typeof value.name === 'string' &&
     typeof value.startDate === 'string' &&
     (value.endDate === null || typeof value.endDate === 'string') &&
-    typeof value.category === 'string' &&
-    CATEGORIES.some((category: EventCategory) => category === value.category) &&
-    typeof value.country === 'string' &&
-    typeof value.contactEmail === 'string' &&
-    typeof value.description === 'string' &&
+    (value.city === null || typeof value.city === 'string') &&
+    (value.organizer === null || typeof value.organizer === 'string') &&
+    (value.location === null || typeof value.location === 'string') &&
+    (value.contactEmail === null || typeof value.contactEmail === 'string') &&
+    (value.description === null || typeof value.description === 'string') &&
     (value.link === null || typeof value.link === 'string') &&
     (value.picture === null || typeof value.picture === 'string')
   );
 }
 
 function isEventsResponse(value: unknown): value is EventsResponse {
-  return isRecord(value) && Array.isArray(value.events) && value.events.every(isPublicEvent);
+  return isRecord(value) &&
+    typeof value.truncated === 'boolean' &&
+    typeof value.total === 'number' && Number.isInteger(value.total) && value.total >= 0 &&
+    Array.isArray(value.events) && value.events.every(isPublicEvent) &&
+    Array.isArray(value.cities) && value.cities.every(
+      (city: unknown) => isRecord(city) &&
+        typeof city.name === 'string' &&
+        typeof city.count === 'number' && Number.isInteger(city.count) && city.count >= 0
+    );
 }
 
-function toUtcDateFloor(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function toUtcDateCeiling(date: Date): string {
-  const utcMidnight = new Date(`${toUtcDateFloor(date)}T00:00:00.000Z`);
-  if (utcMidnight.getTime() < date.getTime()) {
-    utcMidnight.setUTCDate(utcMidnight.getUTCDate() + 1);
-  }
-
-  return utcMidnight.toISOString().slice(0, 10);
-}
-
-export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEventsOptions) {
-  const fromParam = toUtcDateFloor(from);
-  const toParam = toUtcDateCeiling(to);
-  const categoryParam = categories.join(',');
-  const countryParam = countries.join(',');
+export function useEvents({ baseApiUrl, from, to, city }: UseEventsOptions) {
+  const fromParam = from.toISOString();
+  const toParam = to.toISOString();
   const [events, setEvents] = useState<PublicEvent[]>([]);
+  const [availableCities, setAvailableCities] = useState<CityOption[]>([]);
+  const [total, setTotal] = useState(0);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,12 +66,8 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
     let active = true;
     const params = new URLSearchParams({ from: fromParam, to: toParam });
 
-    if (categoryParam) {
-      params.set('category', categoryParam);
-    }
-
-    if (countryParam) {
-      params.set('country', countryParam);
+    if (city) {
+      params.set('city', city);
     }
 
     setEvents([]);
@@ -82,8 +76,6 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
 
     async function loadEvents() {
       let requestUrl: string | null = null;
-      let responseStatus: number | null = null;
-
       try {
         if (typeof baseApiUrl !== 'string' || baseApiUrl.length === 0) {
           throw new Error('The API base URL is missing');
@@ -102,7 +94,6 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
         console.log('Events request URL:', requestUrl);
 
         const response = await httpClient.fetchWithAuth(requestUrl);
-        responseStatus = response.status;
         if (!response.ok) {
           throw new Error(`Events request failed with status ${response.status}`);
         }
@@ -114,6 +105,9 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
 
         if (active) {
           setEvents(payload.events);
+          setAvailableCities(payload.cities);
+          setTotal(payload.total);
+          setTruncated(payload.truncated);
         }
       } catch (requestError) {
         if (active) {
@@ -123,10 +117,7 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
             // TEMPORARY: remove before release
             console.log('Events request URL unavailable: API base URL is missing or invalid');
           }
-          // TEMPORARY: remove before release
-          setError(
-            `Could not load events: ${requestUrl ?? 'API base URL unavailable; request not sent'} (HTTP ${responseStatus ?? 'unavailable'})`
-          );
+          setError('Tapahtumien lataaminen ei onnistunut. Yritä myöhemmin uudelleen.');
         }
       } finally {
         if (active) {
@@ -140,7 +131,7 @@ export function useEvents({ baseApiUrl, from, to, categories, countries }: UseEv
     return () => {
       active = false;
     };
-  }, [fromParam, toParam, categoryParam, countryParam]);
+  }, [baseApiUrl, fromParam, toParam, city]);
 
-  return { events, loading, error };
+  return { events, availableCities, total, truncated, loading, error };
 }

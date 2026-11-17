@@ -1,172 +1,260 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { PublicEvent } from '../../../../lib/events';
 import styles from './event-calendar.module.css';
+import { formatEventDates, getEventsForMonth, getMonthRange, shiftMonth } from './calendar';
 import { useEvents } from './useEvents';
+import EventSubmission from './event-submission';
 
-const LOCALE = 'en-US';
+function DetailIcon({ type }: { type: 'date' | 'city' | 'organizer' | 'contact' }) {
+  const icons = {
+    date: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /></>,
+    city: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
+    organizer: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    contact: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  };
 
-function dayKey(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  return (
+    <svg className={styles.detailIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      {icons[type]}
+    </svg>
+  );
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+function useModalDialog(trigger: HTMLButtonElement | null) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [trigger]);
+  return dialogRef;
+}
+
+export function EventDialog({ event, onDismiss, trigger }: {
+  event: PublicEvent;
+  onDismiss: () => void;
+  trigger: HTMLButtonElement | null;
+}) {
+  const dialogRef = useModalDialog(trigger);
+  const headingId = useId();
+
+  const formatDateTime = (value: string) => new Date(value).toLocaleString('fi-FI', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.dialog}
+      aria-labelledby={headingId}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onDismiss();
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        onDismiss();
+      }}
+    >
+      <div className={styles.dialogHeader}>
+        <div className={styles.dialogHeading}>
+          {event.picture && (
+            <img
+              className={styles.dialogFlyer}
+              src={event.picture}
+              alt={`Tapahtuman ${event.name} juliste`}
+              decoding="async"
+            />
+          )}
+          <h2 id={headingId}>{event.name}</h2>
+        </div>
+        <button type="button" onClick={onDismiss} autoFocus aria-label="Sulje tapahtuman tiedot">Sulje</button>
+      </div>
+      <section className={styles.infoPanel} aria-label="Tapahtuman perustiedot">
+        <h3>Perustiedot</h3>
+        <dl className={styles.detailList}>
+          <div className={styles.detailRow}>
+            <DetailIcon type="date" />
+            <div>
+              <dt>Aika</dt>
+              <dd>{formatDateTime(event.startDate)}{event.endDate && ` – ${formatDateTime(event.endDate)}`}</dd>
+            </div>
+          </div>
+          <div className={styles.detailRow}>
+            <DetailIcon type="city" />
+            <div>
+              <dt>Kaupunki</dt>
+              <dd>{event.city ?? 'Kaupunki puuttuu'}</dd>
+            </div>
+            {event.location && (
+              <div className={styles.detailRow}>
+                <DetailIcon type="city" />
+                <div><dt>Tapahtumapaikka</dt><dd>{event.location}</dd></div>
+              </div>
+            )}
+          </div>
+          {event.organizer && (
+            <div className={styles.detailRow}>
+              <DetailIcon type="organizer" />
+              <div><dt>Järjestäjä</dt><dd>{event.organizer}</dd></div>
+            </div>
+          )}
+          {event.contactEmail && (
+            <div className={styles.detailRow}>
+              <DetailIcon type="contact" />
+              <div><dt>Yhteystiedot</dt><dd>{event.contactEmail}</dd></div>
+            </div>
+          )}
+        </dl>
+      </section>
+      {event.description && (
+        <section className={styles.dialogDetails}>
+          <h3>Tapahtuman tiedot</h3>
+          <div className={styles.description} dangerouslySetInnerHTML={{ __html: event.description }} />
+        </section>
+      )}
+      {event.link && (
+        <a className={styles.dialogLink} href={event.link} target="_blank" rel="noopener noreferrer">
+          Tapahtuman verkkosivu <span aria-hidden="true">↗</span>
+        </a>
+      )}
+    </dialog>
+  );
+}
+
+export function SubmissionDialog({ baseApiUrl, onDismiss, trigger }: {
+  baseApiUrl: string;
+  onDismiss: () => void;
+  trigger: HTMLButtonElement | null;
+}) {
+  const dialogRef = useModalDialog(trigger);
+  const headingId = useId();
+  return (
+    <dialog ref={dialogRef} className={styles.dialog} aria-labelledby={headingId} onCancel={(event) => {
+      event.preventDefault();
+      onDismiss();
+    }}>
+      <div className={styles.dialogHeader}>
+        <h2 id={headingId}>Ilmoita tapahtuma</h2>
+        <button type="button" onClick={onDismiss} autoFocus aria-label="Sulje ilmoituslomake">Sulje</button>
+      </div>
+      <EventSubmission baseApiUrl={baseApiUrl} />
+    </dialog>
+  );
 }
 
 function EventCalendarView({ baseApiUrl }: { baseApiUrl: string }) {
-  const [viewDate, setViewDate] = useState(() => {
-    const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-  });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const offset = (new Date(year, month, 1).getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalCells = Math.ceil((offset + daysInMonth) / 7) * 7;
-  const visibleStart = new Date(year, month, 1 - offset);
-  const visibleEndExclusive = new Date(visibleStart);
-  visibleEndExclusive.setDate(visibleEndExclusive.getDate() + totalCells);
-  const { events, loading, error } = useEvents({
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [city, setCity] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<PublicEvent | null>(null);
+  const [showSubmission, setShowSubmission] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const submissionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const { start, end } = getMonthRange(viewDate);
+  const { events, availableCities, total, truncated, loading, error } = useEvents({
     baseApiUrl,
-    from: visibleStart,
-    to: visibleEndExclusive,
-    categories: [],
-    countries: [],
+    from: start,
+    to: end,
+    city,
   });
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const title = viewDate.toLocaleDateString(LOCALE, {
-    month: 'long',
-    year: 'numeric',
-  });
-  const weekdays = Array.from({ length: 7 }, (_, index) =>
-    new Date(2024, 0, 1 + index).toLocaleDateString(LOCALE, { weekday: 'short' })
-  );
-  const eventsByDay = events.reduce<Record<string, PublicEvent[]>>(
-    (grouped, event) => {
-      const start = new Date(event.startDate);
-      const end = event.endDate ? new Date(event.endDate) : start;
-      const currentDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-
-      while (currentDay <= lastDay) {
-        const key = dayKey(currentDay);
-        (grouped[key] ??= []).push(event);
-        currentDay.setDate(currentDay.getDate() + 1);
-      }
-
-      return grouped;
-    },
-    {}
-  );
-
-  const selectedEvent = events.find((event) => event.id === selectedId);
-
-  function changeMonth(delta: number) {
-    setViewDate(new Date(year, month + delta, 1));
-    setSelectedId(null);
-  }
+  const monthEvents = getEventsForMonth(viewDate, events);
+  const title = viewDate.toLocaleDateString('fi-FI', { month: 'long', year: 'numeric' });
 
   return (
-    <div className={styles.root}>
-      <section className={styles.calendar} aria-label="Event calendar">
+    <div className={styles.root} lang="fi">
+      <section className={styles.calendar} aria-label="Tapahtumat">
+        <div className={styles.actions}>
+          <button type="button" className={styles.submitToggle} aria-haspopup="dialog" ref={submissionTriggerRef} onClick={() => setShowSubmission(true)}>
+            Ilmoita tapahtuma
+          </button>
+        </div>
+        <div className={styles.filters} role="group" aria-label="Suodata kaupungin mukaan">
+          <span className={styles.filterLabel}>Kaupunki</span>
+          <button type="button" aria-pressed={city === ''} onClick={() => setCity('')}>
+            Kaikki kaupungit {!loading && `(${total})`}
+          </button>
+          {availableCities.map((item) => (
+            <button
+              key={item.name}
+              type="button"
+              aria-pressed={city === item.name}
+              onClick={() => setCity(item.name)}
+            >
+              {item.name} {!loading && `(${item.count})`}
+            </button>
+          ))}
+        </div>
+
         <header className={styles.header}>
           <h2 className={styles.title}>{title}</h2>
-          <nav className={styles.nav} aria-label="Calendar navigation">
-            <button type="button" aria-label="Previous month" onClick={() => changeMonth(-1)}>
+          <nav className={styles.nav} aria-label="Kuukauden valinta">
+            <button type="button" aria-label="Edellinen kuukausi" onClick={() => setViewDate((date) => shiftMonth(date, -1))}>
               &lsaquo;
             </button>
-            <button type="button" aria-label="Next month" onClick={() => changeMonth(1)}>
+            <button type="button" aria-label="Seuraava kuukausi" onClick={() => setViewDate((date) => shiftMonth(date, 1))}>
               &rsaquo;
             </button>
           </nav>
         </header>
 
-        {loading && <p role="status">Loading events...</p>}
+        {loading && <p role="status">Ladataan tapahtumia...</p>}
         {error && <p role="alert">{error}</p>}
+        {!loading && !error && truncated && <p>Vain ensimmäiset 500 tapahtumaa näytetään.</p>}
+        {!loading && !error && monthEvents.length === 0 && <p>Ei tapahtumia tässä kuussa.</p>}
 
-        <div className={styles.grid}>
-          {weekdays.map((weekday) => (
-            <div className={styles.weekday} key={weekday}>
-              {weekday}
-            </div>
-          ))}
-
-          {Array.from({ length: totalCells }, (_, index) => {
-            const date = new Date(year, month, 1 - offset + index);
-            const dateEvents = [...(eventsByDay[dayKey(date)] ?? [])].sort(
-              (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-            );
-            const moreEvent = dateEvents[2];
-            const classes = [
-              styles.day,
-              date.getMonth() !== month ? styles.otherMonth : '',
-              date < today ? styles.past : '',
-              date.getTime() === today.getTime() ? styles.today : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-
-            return (
-              <div className={classes} key={dayKey(date)}>
-                <span className={styles.num}>{date.getDate()}</span>
-                {dateEvents.slice(0, 2).map((event) => (
-                  <button
-                    className={styles.chip}
-                    data-event-id={event.id}
-                    key={event.id}
-                    type="button"
-                    onClick={() => setSelectedId(event.id)}
-                  >
-                    <span className={styles.chipTime}>{formatTime(new Date(event.startDate))}</span>
-                    <span>{event.name}</span>
-                  </button>
-                ))}
-                {moreEvent && dateEvents.length > 2 && (
-                  <button
-                    className={styles.more}
-                    data-event-id={moreEvent.id}
-                    type="button"
-                    onClick={() => setSelectedId(moreEvent.id)}
-                  >
-                    +{dateEvents.length - 2}
-                  </button>
-                )}
+        {!loading && !error && monthEvents.length > 0 && (
+          <div className={styles.eventList}>
+            {monthEvents.map((event) => (
+              <div className={styles.event} key={event.id}>
+                <div className={styles.eventRow}>
+                  <time className={styles.eventDate} dateTime={event.startDate}>
+                    {formatEventDates(event.startDate, event.endDate)}
+                  </time>
+                  <span className={styles.eventMain}>
+                    {event.picture && (
+                      <img
+                        className={styles.flyer}
+                        src={event.picture}
+                        alt={`Tapahtuman ${event.name} juliste`}
+                        width="64"
+                        height="80"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className={styles.eventName}
+                      aria-haspopup="dialog"
+                      onClick={(click) => {
+                        triggerRef.current = click.currentTarget;
+                        setSelectedEvent(event);
+                      }}
+                    >
+                      {event.name}
+                    </button>
+                  </span>
+                  <span className={styles.eventCity}>{event.city ?? 'Kaupunki puuttuu'}</span>
+                </div>
               </div>
-            );
-          })}
-        </div>
-
-        {selectedEvent && (
-          <section className={styles.details} aria-label="Event details">
-            <button
-              className={styles.close}
-              type="button"
-              aria-label="Close event details"
-              onClick={() => setSelectedId(null)}
-            >
-              &times;
-            </button>
-            <h3>{selectedEvent.name}</h3>
-            <p className={styles.meta}>
-              {new Date(selectedEvent.startDate).toLocaleDateString(LOCALE, {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })}
-              {' '}{formatTime(new Date(selectedEvent.startDate))}
-              <br />
-              {selectedEvent.category} · {selectedEvent.country}
-            </p>
-            <p>{selectedEvent.description}</p>
-          </section>
+            ))}
+          </div>
         )}
       </section>
+      {selectedEvent && (
+        <EventDialog event={selectedEvent} trigger={triggerRef.current} onDismiss={() => setSelectedEvent(null)} />
+      )}
+      {showSubmission && (
+        <SubmissionDialog baseApiUrl={baseApiUrl} trigger={submissionTriggerRef.current} onDismiss={() => setShowSubmission(false)} />
+      )}
     </div>
   );
 }
